@@ -1,0 +1,5 @@
+City,Model,MAE,RMSE,R2,Num_Features,MAE_Improvement_pct
+delhi,M0_Baseline,34.12,43.43,-0.599,8,0.0
+delhi,M1_Fires,34.31,43.67,-0.618,13,-0.56
+delhi,M2_Tracers,15.79,20.63,0.639,12,53.72
+delhi,M3_Full,15.76,20.62,0.639,17,53.81
