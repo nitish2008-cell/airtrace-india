@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="AirTrace India | Urban Attribution & Policy Sandbox", page_icon="🌐", layout="wide")
 
-# Styling
 st.markdown("""
 <style>
     .metric-box {
@@ -36,7 +35,6 @@ def get_cpcb_category(val):
 st.title("🌐 AirTrace India: Multi-Source Attribution & Policy Sandbox")
 st.caption("Statistical Urban Decomposition Platform | Neural Storm 2026 (JNTUH) GP-01")
 
-# Focus exclusively on cities with verified data artifacts
 CITY_CONFIG = {
     "Hyderabad (Hero City)": {"key": "hyderabad", "lat": 17.3850, "lon": 78.4867},
     "Delhi": {"key": "delhi", "lat": 28.6139, "lon": 77.2090}
@@ -48,33 +46,24 @@ city = city_meta["key"]
 
 @st.cache_data
 def load_data(city_name):
-    # Support both directory structures: root level and nested folders
     attr_path = f"results/{city_name}/attribution_hourly.csv"
     feat_path = f"data/{city_name}/features_all.csv"
     met_path = f"results/{city_name}/metrics.csv"
     
-    if not os.path.exists(attr_path):
-        attr_path = "attribution_hourly.csv"
-    if not os.path.exists(feat_path):
-        feat_path = "features_all.csv"
-    if not os.path.exists(met_path):
-        met_path = "metrics.csv"
-    
-    if not os.path.exists(attr_path) or not os.path.exists(feat_path):
+    if os.path.exists(attr_path) and os.path.exists(feat_path):
+        df_attr = pd.read_csv(attr_path)
+        df_feat = pd.read_csv(feat_path)
+        df_met = pd.read_csv(met_path) if os.path.exists(met_path) else None
+        df_attr["time"] = pd.to_datetime(df_attr["time"])
+        df_feat["time"] = pd.to_datetime(df_feat["time"])
+        return df_attr, df_feat, df_met
+    else:
         return None, None, None
-        
-    df_attr = pd.read_csv(attr_path)
-    df_feat = pd.read_csv(feat_path)
-    df_met = pd.read_csv(met_path) if os.path.exists(met_path) else None
-    
-    df_attr["time"] = pd.to_datetime(df_attr["time"])
-    df_feat["time"] = pd.to_datetime(df_feat["time"])
-    return df_attr, df_feat, df_met
 
 df_attr, df_feat, df_met = load_data(city)
 
 if df_attr is None or df_feat is None:
-    st.error(f"Verified data artifacts not found for {selected_label}. Ensure data/ and results/ pipelines have executed.")
+    st.error(f"Result files for {city} are missing in the repo (results/{city}/ and data/{city}/).")
     st.stop()
 
 latest_attr = df_attr.iloc[-1]
@@ -89,8 +78,8 @@ col2.markdown(f"**CPCB Air Quality Band**<br><span style='color:{cat_color}; fon
 col3.metric("Prevailing Wind", f"{wind_dir} ({int(latest_feat['wind_direction_10m'])}°)")
 col4.metric("Active 24h Fires (<500km)", int(latest_feat.get("total_fires_500km", 0)))
 
-r2_val = df_met.iloc[-1]["R2"] if (df_met is not None and "R2" in df_met.columns) else 0.71
-col5.metric("Model Fidelity (R²)", f"{r2_val:.2f}")
+r2 = df_met.iloc[-1]["R2"] if (df_met is not None and "R2" in df_met.columns) else None
+col5.metric("Model R² (test)", f"{r2:.2f}" if r2 is not None else "n/a")
 
 dominant_source = max(
     {"Traffic & Combustion": latest_attr["traffic_combustion_pct"],
@@ -110,13 +99,13 @@ elif dominant_source[0] == "Dust":
 else:
     advisory = "Elevated sulfur dioxide industrial proxies detected. Statistical indicator suggests peri-urban industrial corridor emission surveillance."
 
-st.info(f"**Dominant Attributed Signal:** {dominant_source[0]} ({dominant_source[1]:.1f}% estimated share). **Operational Context:** {advisory}")
+st.info(f"Indicative signal only (proxy-based): Dominant source signal is {dominant_source[0]} ({dominant_source[1]:.1f}% estimated share). {advisory}")
 
 tabs = st.tabs([
     "📊 Source Decomposition",
-    "📈 Model Fit & In-Sample Tracking",
+    "📉 Model fit (not a forecast)",
     "🎛️ Policy Sandbox (Illustrative)",
-    "🗺️ Spatial Monitoring Perimeter",
+    "🗺️ 500 km study area",
     "📉 Model Ablation & Validation",
     "🌐 Multi-Metro Comparison"
 ])
@@ -143,24 +132,24 @@ with tabs[0]:
     plt.tight_layout()
     st.pyplot(fig)
 
-# TAB 2: Model Fit & In-Sample Tracking
+# TAB 2: Model fit (not a forecast)
 with tabs[1]:
-    st.subheader("Model Tracking Performance (In-Sample Actual vs Predicted)")
+    st.subheader("Model prediction vs modelled PM2.5")
     recent = df_attr.tail(120).copy()
     fig, ax = plt.subplots(figsize=(12, 4))
-    ax.plot(recent["time"], recent["pm25_actual"], label="CAMS Modelled PM2.5", color="#38bdf8", lw=2)
-    ax.plot(recent["time"], recent["pm25_pred"], label="Random Forest M3 Reconstruction", color="#f43f5e", linestyle="--", lw=1.8)
+    ax.plot(recent["time"], recent["pm25_actual"], label="Modelled PM2.5 (CAMS)", color="#38bdf8", lw=2)
+    ax.plot(recent["time"], recent["pm25_pred"], label="M3 model prediction", color="#f43f5e", linestyle="--", lw=1.8)
     ax.set_ylabel("PM2.5 (µg/m³)")
     ax.legend()
     ax.grid(True, linestyle="--", alpha=0.3)
     plt.tight_layout()
     st.pyplot(fig)
-    st.caption("Note: This chart tracks the reconstructive model fit across the past 5 days without autoregressive target lags.")
+    st.caption("Tracks the in-sample reconstructive model fit over the last 5 days without autoregressive target lags.")
 
 # TAB 3: Policy Sandbox
 with tabs[2]:
     st.subheader("Illustrative Policy Intervention Sandbox")
-    st.caption("Note: This simulation provides arithmetic counterfactual estimates based on proportional reductions; it does not model non-linear atmospheric dispersion.")
+    st.caption("Illustrative arithmetic on the estimated shares for the latest hour. Not a prediction of real policy effects.")
     sc_col1, sc_col2 = st.columns(2)
     traffic_reduction = sc_col1.slider("Illustrative Traffic Curb (% reduction in vehicular proxies)", 0, 80, 20)
     dust_reduction = sc_col2.slider("Illustrative Dust Suppression (% reduction in coarse dust)", 0, 80, 25)
@@ -177,9 +166,9 @@ with tabs[2]:
     sim_c2.markdown(f"**Projected CPCB Band**<br><span style='color:{sim_color}; font-size:1.3rem; font-weight:bold;'>{sim_cat}</span>", unsafe_allow_html=True)
     sim_c3.metric("Estimated Improvement", f"{(saved_pm25 / max(latest_attr['pm25_pred'], 1.0)) * 100:.1f}%")
 
-# TAB 4: Spatial Perimeter
+# TAB 4: 500 km study area
 with tabs[3]:
-    st.subheader("Regional Monitoring Perimeter (500 km Geometric Ring)")
+    st.subheader("Regional Study Area (500 km Geometric Perimeter)")
     map_data = pd.DataFrame({"lat": [city_meta["lat"]], "lon": [city_meta["lon"]]})
     angles = np.radians(np.linspace(0, 360, 32))
     radii = 500 / 111.0
@@ -191,10 +180,10 @@ with tabs[3]:
 
 # TAB 5: Model Ablation
 with tabs[4]:
-    st.subheader("Model Ablation & Incremental Validation")
+    st.subheader("Model Ablation & Validation Benchmarking")
     if df_met is not None and "MAE" in df_met.columns:
         fig, ax = plt.subplots(figsize=(8, 3.5))
-        bars = ax.bar(df_met["Model"], df_met["MAE"], color=["#64748b", "#f97316", "#0ea5e9", "#10b981"][:len(df_met)])
+        bars = ax.bar(df_met["Model"], df_met["MAE"], color=["#64748b", "#10b981"][:len(df_met)])
         ax.set_ylabel("Mean Absolute Error (µg/m³)")
         for bar in bars:
             yval = bar.get_height()
@@ -206,9 +195,6 @@ with tabs[4]:
 with tabs[5]:
     st.subheader("Cross-Metro Attribution Comparison")
     shares_path = "results/source_shares_by_city.csv"
-    if not os.path.exists(shares_path):
-        shares_path = "source_shares_by_city.csv"
-        
     if os.path.exists(shares_path):
         df_shares = pd.read_csv(shares_path).set_index("City")
         fig, ax = plt.subplots(figsize=(8, 4))
